@@ -117,6 +117,7 @@ def load_ignore_spec(root: Path,
 
 def walk_codebase(root: Path, spec: pathspec.PathSpec) -> List[Path]:
     """Return a sorted list of files under `root` not matched by `spec`."""
+    root_resolved = root.resolve()
     files: List[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = Path(dirpath).relative_to(root)
@@ -136,9 +137,14 @@ def walk_codebase(root: Path, spec: pathspec.PathSpec) -> List[Path]:
             rel = (rel_dir / fn).as_posix()
             if spec.match_file(rel):
                 continue
-            files.append((root / rel).resolve())
+            resolved_path = (root / rel).resolve()
+            try:
+                resolved_path.relative_to(root_resolved)
+            except ValueError:
+                continue
+            files.append(resolved_path)
 
-    return sorted(files, key=lambda p: p.relative_to(root).as_posix())
+    return sorted(files, key=lambda p: p.relative_to(root_resolved).as_posix())
 
 
 # --------------------------- binary detection -------------------------------
@@ -377,7 +383,7 @@ def write_output(root: Path,
         )
 
     if within_limits(single_text) or not sections:
-        out = output_dir / "codebase.md"
+        out = output_dir / f"{root.name}.md"
         out.write_text(single_text, encoding="utf-8")
         print(f"  wrote {out}  ({total_words:,} words, {total_lines:,} lines, "
               f"{total_bytes:,} bytes, "
@@ -406,7 +412,7 @@ def write_output(root: Path,
         files_in_part = [rel for rel, _, _, _, _ in part_sections]
         header = make_header(part=(i, n), files_in_part=files_in_part)
         body = "".join(b for _, b, _, _, _ in part_sections)
-        out = output_dir / f"codebase_part{i:0{pad}d}.md"
+        out = output_dir / f"{root.name}_part{i:0{pad}d}.md"
         text = header + body
         out.write_text(text, encoding="utf-8")
         print(f"  wrote {out}  ({len(text.split()):,} words, {line_count(text):,} lines, "
